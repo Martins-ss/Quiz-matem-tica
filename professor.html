@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quiz – Professor</title><style>:root{--bg:#0A1325;--s:#121F38;--s2:#1A2B4C;--line:#2A3C61;--fg:#E8EEFB;--mut:#9DB0D3;--acc:#2E6BFF;--ok:#1FA971;--bad:#E5484D}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px system-ui,-apple-system,sans-serif;padding:14px}
+.wrap{max-width:480px;margin:0 auto}.card{background:var(--s);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.badge{background:var(--s2);color:var(--acc);padding:4px 10px;border-radius:20px;font:700 12px monospace}.mut{color:var(--mut);font-size:13px}
+.timer{font:700 42px monospace;color:var(--acc);text-align:center;background:var(--bg);padding:10px;border-radius:12px;border:1px solid var(--line);margin:10px 0}.timer.low{color:var(--bad)}
+.q{background:var(--s2);padding:12px;border-radius:10px;font-size:17px;font-weight:700;margin:12px 0;border-left:4px solid var(--acc)}
+.btn{display:block;width:100%;background:var(--acc);color:#fff;border:0;font:700 17px system-ui;padding:14px;border-radius:12px;margin-top:8px;cursor:pointer}
+.btn:disabled{opacity:.4}.btn.danger{background:var(--bad)}.btn.ghost{background:var(--s2);color:var(--fg)}
+.opt{display:flex;gap:10px;align-items:center;width:100%;text-align:left;background:var(--s2);color:var(--fg);border:2px solid var(--line);border-radius:12px;padding:12px;margin-top:8px;font:16px system-ui}
+.opt b{font-family:monospace;color:var(--acc)}.opt.sel{border-color:var(--acc)}.opt.ok{background:var(--ok);border-color:var(--ok);color:#fff}.opt.ok b,.opt.no b{color:#fff}.opt.no{background:var(--bad);border-color:var(--bad);color:#fff}
+ul{list-style:none;padding:0;margin:10px 0 0}li{background:var(--s2);padding:10px 12px;border-radius:10px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:15px}
+li.me{outline:2px solid var(--acc)}.rk{font:700 14px monospace;color:var(--acc);margin-right:8px}
+input{width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:16px;margin-top:8px}
+h3{margin:0 0 6px;font-size:18px}.warn{color:var(--bad);font-size:14px;margin-top:8px}.big{font:700 22px monospace;text-align:center;color:var(--acc);margin:6px 0}</style></head>
+<body><div class="wrap" id="app"><div class="card">Carregando…</div></div>
+<script>
+const DB="https://quiz-matematica-63f6f-default-rtdb.firebaseio.com";
+const Q=[{"q": "Segundo a aula, de que forma as grandezas derivadas surgem a partir das unidades de base do SI?", "o": ["Por multiplicação ou divisão", "Por soma e subtração", "Por medição direta com instrumentos", "Por arredondamento de valores"], "c": 0, "s": "Slides 3 a 7"}, {"q": "Quantas grandezas fundamentais o SI tem, e o que acontece com as demais?", "o": ["7, e todas as outras derivam delas", "7, e as outras são independentes", "9, e as outras derivam delas", "5, e as outras são independentes"], "c": 0, "s": "Slides 3 a 7"}, {"q": "Quais fórmulas apareceram como exemplo no slide do conceito de grandezas derivadas?", "o": ["v = d / t e F = m · a", "P = E / t e p = F / A", "a = v / t e E = F · d", "f = 1 / T e ρ = m / V"], "c": 0, "s": "Slides 3 a 7"}, {"q": "Qual fórmula foi apresentada para a energia, com unidade J?", "o": ["E = F · d", "E = F / d", "E = m · a", "E = P / t"], "c": 0, "s": "Slides 8 a 12"}, {"q": "Como a densidade (kg/m³) foi apresentada nos slides?", "o": ["V / m", "m / V", "m · V", "m / A"], "c": 1, "s": "Slides 8 a 12"}, {"q": "Como a frequência (Hz) foi apresentada nos slides?", "o": ["T", "1 / T", "2 · T", "d / t"], "c": 1, "s": "Slides 8 a 12"}, {"q": "Qual fórmula e unidade foram apresentadas para a pressão?", "o": ["p = F · A → N", "p = F / A → Pa", "p = m / V → kg/m³", "p = E / t → W"], "c": 1, "s": "Slides 13 a 19"}, {"q": "Qual uso do dia a dia foi associado a pressão arterial e dosagens?", "o": ["Engenharia", "Saúde", "Logística", "Esportes"], "c": 1, "s": "Slides 13 a 19"}, {"q": "Segundo o resumo final, medir bem evita o quê?", "o": ["Erros e custos", "Acidentes e multas", "Atrasos e filas", "Perdas de energia"], "c": 0, "s": "Slides 13 a 19"}];
+const N=Q.length,TIME=30,L="ABCD";
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let state={status:"LOBBY",q:-1,startedAt:0},groups=[],answers=[],last="",offline=false;
+async function api(p,m,b){const r=await fetch(DB+"/"+p+".json",{method:m||"GET",body:b===undefined?undefined:JSON.stringify(b)});if(!r.ok)throw new Error(r.status);return r.json()}
+const rem=()=>Math.max(0,TIME-(Date.now()-state.startedAt)/1000);
+const msize=g=>Object.keys(g.members||{}).length;
+const sorted=()=>groups.slice().sort((a,b)=>(b.score||0)-(a.score||0)||a.name.localeCompare(b.name));
+const ansOf=(gid,q)=>answers.find(a=>a.id===q+"_"+gid);
+async function poll(){
+  try{
+    const d=(await api(""))||{};offline=false;
+    const s=JSON.stringify(d);
+    if(s!==last){last=s;
+      state=d.state||{status:"LOBBY",q:-1,startedAt:0};
+      groups=Object.entries(d.groups||{}).map(([id,v])=>({id,...v}));
+      answers=Object.entries(d.answers||{}).map(([id,v])=>({id,...v}));
+      render();}
+  }catch(e){offline=true;if(!last)$("app").innerHTML='<div class="card"><h3>Sem conexão</h3><p class="mut">Não consegui falar com o banco de dados. Confira a internet e o endereço do Firebase.</p></div>'}
+}
+function tick(){
+  const t=$("timer");if(!t)return;const r=Math.ceil(rem());
+  if(state.status==="PLAYING"){t.textContent=r+"s";t.classList.toggle("low",r<=5);if(window.onZero&&r<=0)window.onZero()}
+  else{t.textContent=state.status==="REVEAL"?"0s":TIME+"s";t.classList.remove("low")}
+}
+function opts(q,pick,showOk,click){
+  return Q[q].o.map((t,i)=>{let c="opt";if(showOk&&i===Q[q].c)c+=" ok";else if(showOk&&pick===i)c+=" no";else if(pick===i)c+=" sel";
+  const tag=click?"button":"div";return `<${tag} class="${c}" ${click?`onclick="answer(${i})"`:""}><b>${L[i]}</b><span>${esc(t)}</span></${tag}>`}).join("");
+}
+function board(meId){
+  const s=sorted();if(!s.length)return '<li class="mut" style="justify-content:center">Nenhum grupo entrou ainda</li>';
+  return s.map((g,i)=>`<li class="${g.id===meId?"me":""}"><span><span class="rk">#${i+1}</span><b>${esc(g.name)}</b> <span class="mut">(${msize(g)}/6)</span></span><b>${g.score||0} pts</b></li>`).join("");
+}
+setInterval(poll,1000);setInterval(tick,250);poll();
+
+let revealed=-1;
+window.onZero=()=>{if(state.status==="PLAYING"&&revealed!==state.q)reveal()};
+async function reveal(){
+  revealed=state.q;
+  for(const g of groups){let s=0;
+    for(const a of answers){if(a.g===g.id&&Q[a.q]&&Q[a.q].c===a.ch)s+=10+Math.round(10*(a.rem||0)/TIME)}
+    await api("groups/"+g.id,"PATCH",{score:s});}
+  await api("state","PATCH",{status:"REVEAL"});last="";poll();
+}
+async function startQuiz(){revealed=-1;await api("state","PUT",{status:"PLAYING",q:0,startedAt:Date.now()});last="";poll()}
+async function nextQ(){revealed=-1;
+  if(state.q<N-1)await api("state","PUT",{status:"PLAYING",q:state.q+1,startedAt:Date.now()});
+  else await api("state","PUT",{status:"FINISHED",q:state.q,startedAt:0});last="";poll()}
+async function resetAll(){if(!confirm("Zerar a partida e apagar os grupos?"))return;
+  revealed=-1;await api("","PUT",{state:{status:"LOBBY",q:-1,startedAt:0}});last="";poll()}
+function render(){
+  const st=state.status,q=state.q,bad=groups.some(g=>msize(g)<2);let body;
+  if(st==="LOBBY"){body=`<div class="q">Aguardando os grupos entrarem. Cada grupo precisa de 2 a 6 pessoas.</div>
+    <button class="btn" onclick="startQuiz()" ${!groups.length||bad?"disabled":""}>▶ Iniciar Partida</button>${bad?'<div class="warn">Há grupo com menos de 2 pessoas.</div>':""}`}
+  else if(st==="FINISHED"){body='<div class="q">Partida finalizada! Veja o placar final abaixo.</div>'}
+  else{const n=answers.filter(a=>a.q===q).length;
+    body=`<div class="mut">${Q[q].s} · pergunta ${q+1} de ${N}</div><div class="q">${q+1}. ${esc(Q[q].q)}</div>${opts(q,-1,true,false)}<div class="mut" style="margin-top:10px">Responderam: ${n}/${groups.length} grupos</div>
+    ${st==="PLAYING"?'<button class="btn ghost" onclick="reveal()">Encerrar tempo agora</button>':`<button class="btn" onclick="nextQ()">${q<N-1?"Próxima Pergunta ➔":"Finalizar Partida"}</button>`}`}
+  $("app").innerHTML=`<div class="card"><div class="row"><span class="badge">PROFESSOR</span><span class="mut">${st==="LOBBY"?0:Math.min(q+1,N)}/${N}</span></div>
+  <div class="timer" id="timer">${TIME}s</div>${body}</div>
+  <div class="card"><h3>Placar dos Grupos</h3><ul>${board("")}</ul></div>
+  <div class="card"><h3>Participantes</h3>${groups.map(g=>`<div class="mut"><b>${esc(g.name)}:</b> ${Object.values(g.members||{}).map(m=>esc(m.n)).join(", ")}</div>`).join("")||'<div class="mut">Ninguém ainda</div>'}</div>
+  <button class="btn danger" onclick="resetAll()">🔄 Reiniciar Sala / Zerar Grupos</button>`;
+  tick();
+}
+</script></body></html>
